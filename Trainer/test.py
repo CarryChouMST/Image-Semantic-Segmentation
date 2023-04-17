@@ -74,7 +74,7 @@ def test(net,
 
     return loss, res_dict
 
-def dilated_test(net, config_path, size=300, dilated_size=512, gamma=0.5, update=False):
+def dilated_test(net, config_path, size=300, dilated_size=512):
     
     '''read the config file'''
     cf = configparser.ConfigParser()
@@ -85,7 +85,7 @@ def dilated_test(net, config_path, size=300, dilated_size=512, gamma=0.5, update
 
     '''read input data, using BasicDataset and Dataloader'''
     test_dataset = BasicDataset(root=root_path, image_set='test')
-    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0)  # pred test_sample one by one
+    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)  # pred test_sample one by one
 
     '''set loss function and metrics class'''
     criterion = nn.BCEWithLogitsLoss(torch.tensor([16.0]).cuda())
@@ -95,16 +95,7 @@ def dilated_test(net, config_path, size=300, dilated_size=512, gamma=0.5, update
     visualizer = Visualizer(comment='test')
 
     '''load net to cuda, load the params'''
-    if update:
-        net_dict = net.state_dict()
-        weight_dict = torch.load(test_model_path)
-        weight_dict = {k:v for k, v in weight_dict.items() if k in net_dict}
-        net_dict.update(weight_dict)
-        net.load_state_dict(net_dict)
-        logging.info(f'loaded!')
-    else:
-        net.load_state_dict(torch.load(test_model_path))
-    logging.info(f'loading {test_model_path} finished!')
+    net.load_state_dict(torch.load(test_model_path))
     net.cuda()
     net.eval()
 
@@ -116,32 +107,31 @@ def dilated_test(net, config_path, size=300, dilated_size=512, gamma=0.5, update
     visual_list = np.random.randint(0, len(loader), 40)
 
     for i, data in enumerate(loader):
-        # if i < 1:
 
-        input_raw = data['image'].detach()  # BCHW 1500*1500
-        label_raw = data['label'].detach()
-
+        input_raw = data['image']  # BCHW 1500*1500
+        label_raw = data['label']
+        
         '''crop to inference'''
         use_to_inference_map = get_dilated_inference_map(img=input_raw, size=size, input_size=dilated_size)
         input_list = img_patchs(map=use_to_inference_map, img=input_raw, input_size=dilated_size)  # NBCHW
         label_list = img_patchs(map=use_to_inference_map, img=label_raw, input_size=dilated_size)  # NBCHW
-
+        
         '''inference each input'''
         results=[]
         temp_loss = 0
-
+        
         for i_i, (input, label) in enumerate(zip(input_list, label_list)):
             with torch.no_grad():
                 input = input.cuda()
                 label = label.cuda()
                 output = net(input.cuda())  # before sigmoid
                 output_prob = torch.sigmoid(output.data)
-                pred = (output_prob > gamma).type(torch.float32).data.cpu()  # BCHW Tensor in CPU
+                pred = (output_prob > 0.5).type(torch.float32).data.cpu()  # BCHW Tensor in CPU
                 results.append(pred)
                 temp_loss = criterion(output.data, label.data) + temp_loss
-
+       
         pred_raw = pred_fusion(map=use_to_inference_map, results=results, img_shape=label_raw.shape, size=size)  # BCHW  CPU
-
+        
         '''update loss and metric'''
         loss += temp_loss/(i_i+1)
         test_metricer.update(label_raw.cpu().numpy(), pred_raw.cpu().numpy())
