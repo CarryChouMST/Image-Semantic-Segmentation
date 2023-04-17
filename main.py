@@ -61,3 +61,35 @@ if __name__ == '__main__':
         print(f'res_dict={res_dict}')
     if mode == 'bridge':
         bridge(net=net, config_path=config_path)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

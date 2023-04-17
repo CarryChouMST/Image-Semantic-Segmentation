@@ -1,3 +1,4 @@
 int b = 1;
 cout << b << endl;
-
+int a = 2;
+cout << a <<endl;
